@@ -308,6 +308,7 @@ async def process_resource_causes(
     # If the wait exceeds its time and no new consistent events arrive, then fake the consistency.
     # However, if a patch is accumulated by now, skip waiting and apply it instantly (by exiting).
     # In that case, we are guaranteed to be inconsistent, so also skip the state-dependent handlers.
+    unslept: Optional[float] = None
     consistency_is_required = changing_cause is not None
     consistency_is_achieved = consistency_time is None  # i.e. preexisting consistency
     if consistency_is_required and not consistency_is_achieved and not patch and consistency_time:
@@ -316,6 +317,8 @@ async def process_resource_causes(
         consistency_is_achieved = unslept is None  # "woke up" vs. "timed out"
     if consistency_is_required and not consistency_is_achieved:
         changing_cause = None  # exit to PATCHing and/or re-iterating over new events.
+    rv = raw_event.get('object', {}).get('metadata', {}).get('resourceVersion')
+    local_logger.debug(f'>>> {rv=} {consistency_is_required=} {consistency_is_achieved=} {unslept=} {changing_cause=}')
 
     # Now, the consistency is either pre-proven (by receiving or not expecting any resource version)
     # or implied (by exceeding the allowed consistency-waiting timeout while getting no new events).

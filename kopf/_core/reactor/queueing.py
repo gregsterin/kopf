@@ -172,6 +172,7 @@ async def watcher(
                                    exception_handler=exception_handler)
     streams: Streams = {}
 
+    loop = asyncio.get_running_loop()
     try:
         # Either use the existing object's queue, or create a new one together with the per-object job.
         # "Fire-and-forget": we do not wait for the result; the job destroys itself when it is fully done.
@@ -192,12 +193,21 @@ async def watcher(
             if isinstance(raw_event, watching.Bookmark):
                 continue
 
+            # TODO: REMOVE: only for debugging!
+            rv = raw_event.get('object', {}).get('metadata', {}).get('resourceVersion')
+            fld = raw_event.get('object', {}).get('spec', {}).get('field')
+            knd = raw_event.get('object', {}).get('kind')
+            nam = raw_event.get('object', {}).get('metadata', {}).get('name')
+            logger.debug(f'STREAM GOT {knd=} {nam=} {rv=} // {fld=} ')
+
             # Multiplex the raw events to per-resource workers/queues. Start the new ones if needed.
             key: ObjectRef = (resource, get_uid(raw_event))
             try:
                 # Feed the worker, as fast as possible, no extra activities.
-                streams[key].pressure.set()  # interrupt current sleeps, if any.
-                await streams[key].backlog.put(raw_event)
+                loop.call_later(3.0, streams[key].pressure.set)
+                loop.call_later(3.0, streams[key].backlog.put_nowait, raw_event)
+                # streams[key].pressure.set()  # interrupt current sleeps, if any.
+                # await streams[key].backlog.put(raw_event)
             except KeyError:
 
                 # Block the operator's readiness for individual resource's index handlers.
@@ -211,8 +221,10 @@ async def watcher(
 
                 # Start the worker, and feed it initially. Starting can be moderately slow.
                 streams[key] = Stream(backlog=asyncio.Queue(), pressure=asyncio.Event())
-                streams[key].pressure.set()  # interrupt current sleeps, if any.
-                await streams[key].backlog.put(raw_event)
+                # streams[key].pressure.set()  # interrupt current sleeps, if any.
+                # await streams[key].backlog.put(raw_event)
+                loop.call_later(3.0, streams[key].pressure.set)
+                loop.call_later(3.0, streams[key].backlog.put_nowait, raw_event)
                 await scheduler.spawn(
                     name=f'worker for {key}',
                     coro=worker(
@@ -315,6 +327,13 @@ async def worker(
             # Exit gracefully and immediately on the end-of-stream marker sent by the watcher.
             if isinstance(raw_event, EOS):
                 break  # out of the worker.
+
+            # TODO: REMOVE: only for debugging!
+            rv = raw_event.get('object', {}).get('metadata', {}).get('resourceVersion')
+            fld = raw_event.get('object', {}).get('spec', {}).get('field')
+            knd = raw_event.get('object', {}).get('kind')
+            nam = raw_event.get('object', {}).get('metadata', {}).get('name')
+            logger.debug(f'QUEUED GOT {knd=} {nam=} {rv=} exp={expected_version!r} // {fld=} ')
 
             # Keep track of the resource's consistency for high-level (state-dependent) handlers.
             # See `settings.persistence.consistency_timeout` for the explanation of consistency.
