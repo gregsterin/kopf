@@ -28,6 +28,7 @@ the root object, while keeping the legacy names for backward compatibility.
 import concurrent.futures
 import dataclasses
 import logging
+import warnings
 from typing import Iterable, Optional, Union
 
 from kopf._cogs.configs import diffbase, progress
@@ -187,6 +188,7 @@ class WatchingSettings:
     """
 
 
+# TODO: is it now WorkerSettings/MultiplexerSettings?
 @dataclasses.dataclass
 class BatchingSettings:
     """
@@ -204,12 +206,6 @@ class BatchingSettings:
     How soon an idle worker is exited and garbage-collected if no events arrive.
     """
 
-    batch_window: float = 0.1
-    """
-    How fast/slow does a worker deplete the queue when an event is received.
-    All events arriving within this window will be ignored except the last one.
-    """
-
     exit_timeout: float = 2.0
     """
     How soon a worker is cancelled when the parent watcher is going to exit.
@@ -222,6 +218,21 @@ class BatchingSettings:
 
     For more information on error throttling, see :ref:`error-throttling`.
     """
+
+    _batch_window: float = 0.1  # deprecated
+
+    @property
+    def batch_window(self) -> float:
+        """ Deprecated and affects nothing. """
+        warnings.warn("Time-based event batching was removed. Please stop configuring it.",
+                      DeprecationWarning)
+        return self._batch_window
+
+    @batch_window.setter
+    def batch_window(self, value: float) -> None:
+        warnings.warn("Time-based event batching was removed. Please stop configuring it.",
+                      DeprecationWarning)
+        self._batch_window = value
 
 
 @dataclasses.dataclass
@@ -372,6 +383,42 @@ class PersistenceSettings:
         default_factory=diffbase.AnnotationsDiffBaseStorage)
     """
     How the resource's essence (non-technical, contentful fields) are stored.
+    """
+
+    consistency_timeout: float = 5.0
+    """
+    For how long a patched resource is awaited before giving up (in seconds).
+
+    Generally, a resource's events and updates streamed from the Kubernetes API
+    are processed as soon as possible, with no delays or skipping. However,
+    high-level change-detection handlers (on-creation/resume/update/deletion)
+    require a consistent state of the resource. _Consistency_ means that all
+    patches applied by Kopf itself have arrived back via the watch-stream.
+    If Kopf did not patch the resource recently, it is consistent by definition.
+
+    The _inconsistent_ states can be seen in relatively rare circumstances 
+    on slow networks (operator⟺apiservers) or under high load, especially
+    when the operator or a third party patches the resource on their own.
+    In those cases, the framework can misinterpret the intermediate states
+    and perform double-processing (double handler execution).
+
+    To prevent this, all state-dependent handlers are postponed until
+    the consistency is reached via one of the following two ways:
+    
+    * The expected resource version from the PATCH API operation arrives
+      via the watch-stream of the resource within the specified time window.
+    * The expected resource version from the PATCH API operation does not arrive
+      via the watch-stream within the specified time window, in which case
+      the consistency is assumed (implied) and the processing continues as if
+      the version has arrived, possibly causing the mentioned side-effects.
+
+    The time window is measured relative to the time of the last ``PATCH`` call.
+    The timeout should be long enough to assume that if the expected resource
+    version did not arrive within the specified time, it will never arrive.
+
+    If external storages are used for persistence, the consistency plays
+    no role --- it can be disabled by setting the timeout to ``0`` or ``None``.
+    The default value aims to the safest scenario (the consistency is required).
     """
 
 
