@@ -6,7 +6,6 @@ import json
 import logging
 import re
 import sys
-import time
 from unittest.mock import Mock
 
 import aiohttp.web
@@ -553,69 +552,6 @@ def no_certvalidator():
 
 
 #
-# Helpers for the timing checks.
-#
-
-@pytest.fixture()
-def timer():
-    return Timer()
-
-
-class Timer(object):
-    """
-    A helper context manager to measure the time of the code-blocks.
-    Also, supports direct comparison with time-deltas and the numbers of seconds.
-
-    Usage:
-
-        with Timer() as timer:
-            do_something()
-            print(f"Executing for {timer.seconds}s already.")
-            do_something_else()
-
-        print(f"Executed in {timer.seconds}s.")
-        assert timer < 5.0
-    """
-
-    def __init__(self):
-        super().__init__()
-        self._ts = None
-        self._te = None
-
-    @property
-    def seconds(self):
-        if self._ts is None:
-            return None
-        elif self._te is None:
-            return time.perf_counter() - self._ts
-        else:
-            return self._te - self._ts
-
-    def __repr__(self):
-        status = 'new' if self._ts is None else 'running' if self._te is None else 'finished'
-        return f'<Timer: {self.seconds}s ({status})>'
-
-    def __enter__(self):
-        self._ts = time.perf_counter()
-        self._te = None
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self._te = time.perf_counter()
-
-    async def __aenter__(self):
-        return self.__enter__()
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        return self.__exit__(exc_type, exc_val, exc_tb)
-
-    def __int__(self):
-        return int(self.seconds)
-
-    def __float__(self):
-        return float(self.seconds)
-
-#
 # Helpers for the logging checks.
 #
 
@@ -725,3 +661,9 @@ def _no_asyncio_pending_tasks(event_loop):
     remains = after - before
     if remains:
         pytest.fail(f"Unattended asyncio tasks detected: {remains!r}")
+
+
+@pytest.fixture()
+def loop(event_loop):
+    """Sync aiohttp's server-side timeline with kopf's client-side timeline."""
+    return event_loop

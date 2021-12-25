@@ -5,7 +5,7 @@ from kopf._core.intents.stoppers import DaemonStoppingReason
 
 
 async def test_running_daemon_is_stopped_when_mismatches(
-        resource, dummy, timer, mocker, caplog, assert_logs, k8s_mocked, simulate_cycle):
+        resource, dummy, looptime, mocker, caplog, assert_logs, k8s_mocked, simulate_cycle):
     caplog.set_level(logging.DEBUG)
 
     @kopf.daemon(*resource, id='fn', when=lambda **_: is_matching)
@@ -26,9 +26,8 @@ async def test_running_daemon_is_stopped_when_mismatches(
     mocker.resetall()
     is_matching = False
     await simulate_cycle({})
-    with timer:
-        await dummy.wait_for_daemon_done()
+    await dummy.wait_for_daemon_done()
 
-    assert timer.seconds < 0.01  # near-instantly
+    assert looptime == 0
     stopped = dummy.kwargs['stopped']
     assert DaemonStoppingReason.FILTERS_MISMATCH in stopped.reason

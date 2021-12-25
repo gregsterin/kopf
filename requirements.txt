@@ -12,6 +12,7 @@ coveralls
 freezegun
 import-linter
 isort>=5.5.0
+looptime
 lxml
 # Mypy requires typed-ast, which is broken on PyPy 3.7 (could work in PyPy 3.8).
 mypy==0.930; implementation_name == "cpython"

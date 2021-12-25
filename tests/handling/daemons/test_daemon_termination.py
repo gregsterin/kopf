@@ -9,7 +9,7 @@ import kopf
 
 async def test_daemon_exits_gracefully_and_instantly_on_resource_deletion(
         settings, resource, dummy, simulate_cycle,
-        caplog, assert_logs, k8s_mocked, frozen_time, mocker, timer):
+        caplog, assert_logs, k8s_mocked, frozen_time, mocker, looptime):
     caplog.set_level(logging.DEBUG)
 
     # A daemon-under-test.
@@ -31,10 +31,9 @@ async def test_daemon_exits_gracefully_and_instantly_on_resource_deletion(
     await simulate_cycle(event_object)
 
     # Check that the daemon has exited near-instantly, with no delays.
-    with timer:
-        await dummy.wait_for_daemon_done()
+    await dummy.wait_for_daemon_done()
 
-    assert timer.seconds < 0.01  # near-instantly
+    assert looptime == 0
     assert k8s_mocked.sleep.call_count == 0
     assert k8s_mocked.patch.call_count == 1
     assert k8s_mocked.patch.call_args_list[0][1]['payload']['metadata']['finalizers'] == []
@@ -42,7 +41,7 @@ async def test_daemon_exits_gracefully_and_instantly_on_resource_deletion(
 
 async def test_daemon_exits_gracefully_and_instantly_on_operator_exiting(
         settings, resource, dummy, simulate_cycle, background_daemon_killer,
-        caplog, assert_logs, k8s_mocked, frozen_time, mocker, timer):
+        caplog, assert_logs, k8s_mocked, frozen_time, mocker, looptime):
     caplog.set_level(logging.DEBUG)
 
     # A daemon-under-test.
@@ -63,10 +62,9 @@ async def test_daemon_exits_gracefully_and_instantly_on_operator_exiting(
     background_daemon_killer.cancel()
 
     # Check that the daemon has exited near-instantly, with no delays.
-    with timer:
-        await dummy.wait_for_daemon_done()
+    await dummy.wait_for_daemon_done()
 
-    assert timer.seconds < 0.01  # near-instantly
+    assert looptime == 0
     assert k8s_mocked.sleep.call_count == 0
     assert k8s_mocked.patch.call_count == 0
 
@@ -78,7 +76,7 @@ async def test_daemon_exits_gracefully_and_instantly_on_operator_exiting(
 @pytest.mark.usefixtures('background_daemon_killer')
 async def test_daemon_exits_gracefully_and_instantly_on_operator_pausing(
         settings, memories, resource, dummy, simulate_cycle, conflicts_found,
-        caplog, assert_logs, k8s_mocked, frozen_time, mocker, timer):
+        caplog, assert_logs, k8s_mocked, frozen_time, mocker, looptime):
     caplog.set_level(logging.DEBUG)
 
     # A daemon-under-test.
@@ -99,9 +97,8 @@ async def test_daemon_exits_gracefully_and_instantly_on_operator_pausing(
     await conflicts_found.turn_to(True)
 
     # Check that the daemon has exited near-instantly, with no delays.
-    with timer:
-        await dummy.wait_for_daemon_done()
-    assert timer.seconds < 0.01  # near-instantly
+    await dummy.wait_for_daemon_done()
+    assert looptime == 0
 
     # There is no way to test for re-spawning here: it is done by watch-events,
     # which are tested by the paused operators elsewhere (test_daemon_spawning.py).
